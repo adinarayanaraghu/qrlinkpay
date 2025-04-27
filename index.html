@@ -43,34 +43,40 @@
     const pa = params.get('pa');
     const am = params.get('am');
 
-    // If pa & am are in URL → do redirect behavior
     if (pa && am) {
+      // REDIRECT MODE: use Android intent:// scheme for chooser across all UPI apps
       document.getElementById('redirectUI').hidden = false;
-      const intent = `upi://pay?pa=${encodeURIComponent(pa)}&am=${encodeURIComponent(am)}&cu=INR`;
-      // fallback link
-      document.getElementById('fallback').href = intent;
-      // auto-redirect
-      setTimeout(() => window.location.replace(intent), 300);
+      const intentLink =
+        `intent://pay?pa=${encodeURIComponent(pa)}&am=${encodeURIComponent(am)}&cu=INR` +
+        `#Intent;scheme=upi;action=android.intent.action.VIEW;end`;
+      // fallback to basic UPI URI
+      const upiUri = `upi://pay?pa=${encodeURIComponent(pa)}&am=${encodeURIComponent(am)}&cu=INR`;
+      const fallbackEl = document.getElementById('fallback');
+      fallbackEl.href = intentLink;
+      fallbackEl.onclick = e => {
+        // if intent fails, try the generic UPI URI
+        setTimeout(() => window.location.replace(upiUri), 500);
+      };
+      // auto-redirect to intent URI
+      setTimeout(() => window.location.replace(intentLink), 300);
     } else {
-      // Show scanner UI
+      // SCANNER MODE
       document.getElementById('scannerUI').hidden = false;
-
       const video = document.getElementById('video');
       const canvas = document.getElementById('canvas');
-      const ctx    = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d');
       const controls = document.getElementById('controls');
       const upiIdSpan = document.getElementById('upiId');
       const amountInput = document.getElementById('amount');
-      const genBtn      = document.getElementById('generateLink');
-      const payLink     = document.getElementById('payLink');
+      const genBtn = document.getElementById('generateLink');
+      const payLink = document.getElementById('payLink');
       const whatsappBtn = document.getElementById('whatsappShare');
 
       let scanning = true;
 
-      // start camera
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(s => {
-          video.srcObject = s;
+        .then(stream => {
+          video.srcObject = stream;
           video.play();
           requestAnimationFrame(tick);
         })
@@ -79,7 +85,7 @@
       function tick() {
         if (!scanning) return;
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          canvas.width  = video.videoWidth;
+          canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -91,7 +97,7 @@
               try {
                 const u = new URL(upiId);
                 upiId = u.searchParams.get('pa') || upiId;
-              } catch {}
+              } catch {};
             }
             upiIdSpan.textContent = upiId;
             controls.hidden = false;
@@ -104,13 +110,11 @@
         const upiId = upiIdSpan.textContent.trim();
         const amount = amountInput.value.trim();
         if (!upiId || !amount) return alert('Please enter both UPI ID and amount');
-        // build HTTPS web-link pointing back here
+        // shareable HTTPS web-link pointing back here
         const webLink = `${location.origin + location.pathname}?pa=${encodeURIComponent(upiId)}&am=${encodeURIComponent(amount)}`;
         payLink.href = webLink;
         payLink.hidden = false;
-        // WhatsApp share
-        const msg = `Please pay ₹${amount} to ${upiId} via UPI:
-${webLink}`;
+        const msg = `Please pay ₹${amount} to ${upiId} via UPI:\n${webLink}`;
         whatsappBtn.href = `https://wa.me/?text=${encodeURIComponent(msg)}`;
         whatsappBtn.hidden = false;
       });
