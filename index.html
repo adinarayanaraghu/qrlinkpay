@@ -6,7 +6,6 @@
   <title>Minimal UPI QR Scanner</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    /* Reset */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; overflow: hidden; }
     body {
@@ -21,15 +20,13 @@
       display: flex; flex-direction: column; align-items: center;
       overflow: auto;
     }
-    /* Header Card */
     .header-card {
       width: 100%; background: #fafafa; border-radius: 8px;
       padding: 12px 16px; margin-bottom: 24px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      text-align: center; /* Center the header text */
+      text-align: center;
     }
     .header-card h2 { font-size: 18px; color: #4a4a4a; margin: 0; }
-    /* Scanner Box */
     #scannerContainer {
       position: relative; width:100%; padding-top:75%;
       background:#000; border-radius:8px; overflow:hidden;
@@ -43,16 +40,13 @@
     @keyframes scanLine { 0%,100%{top:0;} 50%{top:calc(100% - 3px);} }
     #upiText { font-size:14px; margin-bottom:16px; color:#555; }
     .controls { width:100%; display:flex; justify-content:flex-end; margin-bottom:16px; }
-    .icon-btn {
-      background:#fff; border:1px solid #e0e0e0; border-radius:50%;
-      width:36px; height:36px; display:flex; align-items:center; justify-content:center;
-      cursor:pointer; font-size:18px; color:#ff4d4f; opacity:0;
-      transition:opacity 0.3s, transform 0.2s;
+    .icon-btn { background:#fff; border:1px solid #e0e0e0; border-radius:50%; width:36px; height:36px;
+      display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:18px; color:#ff4d4f;
+      opacity:0; transition:opacity 0.3s, transform 0.2s;
     }
     .icon-btn.visible { opacity:1; }
     .icon-btn:hover { transform:scale(1.1); }
-    input, button {
-      width:100%; padding:12px; border-radius:8px; border:1px solid #d9d9d9;
+    input, button { width:100%; padding:12px; border-radius:8px; border:1px solid #d9d9d9;
       font-size:15px; margin-bottom:16px; transition:box-shadow 0.3s, border-color 0.3s;
     }
     input { display:none; }
@@ -61,10 +55,14 @@
     .btn.enabled { opacity:1; }
     .btn:disabled { cursor:not-allowed; opacity:0.5; }
     .btn:hover:enabled { background:#40a9ff; }
-    .btn.download { background:#52c41a; display:none; }
-    .btn.download.enabled { display:block; margin-top:16px; opacity:1; }
-    .btn.download:hover:enabled { background:#73d13d; }
     #qrCanvas { display:none; width:60%; max-width:240px; margin:0 auto 16px auto; }
+    .share-btn {
+      display:none; width:100%; padding:12px; border-radius:8px;
+      background:#52c41a; color:#fff; border:none; cursor:pointer;
+      font-size:15px; margin-bottom:16px; opacity:0.8;
+    }
+    .share-btn.enabled { display:block; opacity:1; }
+    .share-btn:hover:enabled { opacity:0.9; }
     footer { font-size:12px; color:#999; margin-top:24px; }
   </style>
 </head>
@@ -72,7 +70,7 @@
   <div class="container">
     <div class="header-card"><h2>Scan the QR</h2></div>
     <div id="scannerContainer">
-      <video id="video" autoplay playsinline></video>
+      <video id="video" autoplay playsinline muted></video>
       <div id="laserLine"></div>
     </div>
     <div id="upiText">Scanning for UPI ID…</div>
@@ -80,36 +78,110 @@
       <button id="undo" class="icon-btn" title="Scan Again">↺</button>
     </div>
     <input type="number" id="amountInput" placeholder="Enter amount (₹)" />
-    <button id="shareBtn" class="btn" disabled>Share on WhatsApp</button>
     <canvas id="qrCanvas"></canvas>
-    <button id="downloadBtn" class="btn download" disabled>Download QR</button>
+    <button id="shareBtn" class="share-btn" disabled>Share</button>
     <footer id="footer"></footer>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrious/dist/qrious.min.js"></script>
   <script>
+    // Footer
     const footer = document.getElementById('footer');
     footer.textContent = `© ${new Date().getFullYear()} Made with ❤️ in India, a product of ECPL`;
 
-    (async ()=>{
-      const video=document.getElementById('video'), canvas=document.createElement('canvas'), ctx=canvas.getContext('2d');
-      const scanner=document.getElementById('scannerContainer'), laser=document.getElementById('laserLine');
-      const upiText=document.getElementById('upiText'), undoBtn=document.getElementById('undo');
-      const amountInput=document.getElementById('amountInput'), shareBtn=document.getElementById('shareBtn');
-      const downloadBtn=document.getElementById('downloadBtn'), qrCanvas=document.getElementById('qrCanvas');
-      let upiId='', scanning=true;
+    (async () => {
+      const video = document.getElementById('video');
+      const canvasEl = document.createElement('canvas');
+      const ctx = canvasEl.getContext('2d');
+      const scanner = document.getElementById('scannerContainer');
+      const laser = document.getElementById('laserLine');
+      const upiText = document.getElementById('upiText');
+      const undoBtn = document.getElementById('undo');
+      const amountInput = document.getElementById('amountInput');
+      const qrCanvas = document.getElementById('qrCanvas');
+      const shareBtn = document.getElementById('shareBtn');
+      let upiId = '';
+      let scanning = true;
 
-      try { video.srcObject=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); }
-      catch{upiText.textContent='Camera access denied'; laser.style.display='none'; return;}
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = stream;
+        video.muted = true;
+        await video.play();
+      } catch (err) {
+        console.error('Camera error:', err);
+        upiText.textContent = 'Camera access denied';
+        laser.style.display = 'none';
+        return;
+      }
 
-      function scan(){ if(!scanning) return; if(video.readyState===video.HAVE_ENOUGH_DATA){ canvas.width=video.videoWidth;canvas.height=video.videoHeight;ctx.drawImage(video,0,0);const data=jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height); if(data&&data.data){ const m=data.data.match(/[?&]pa=([\w.\-@]+)/); upiId=m?m[1]:(data.data.match(/^[\w.\-@]+$/)||[])[0]; if(upiId){ scanning=false;scanner.style.display='none';laser.style.display='none';upiText.textContent='UPI ID: '+upiId;undoBtn.classList.add('visible');amountInput.style.display='block';amountInput.focus();}}}requestAnimationFrame(scan);} scan();
+      function scan() {
+        if (!scanning) return;
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvasEl.width = video.videoWidth;
+          canvasEl.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0);
+          const data = jsQR(ctx.getImageData(0, 0, canvasEl.width, canvasEl.height).data, canvasEl.width, canvasEl.height);
+          if (data && data.data) {
+            const match = data.data.match(/[?&]pa=([\w.\-@]+)/);
+            upiId = match ? match[1] : (data.data.match(/^[\w.\-@]+$/) || [])[0];
+            if (upiId) {
+              scanning = false;
+              scanner.style.display = 'none';
+              laser.style.display = 'none';
+              upiText.textContent = 'UPI ID: ' + upiId;
+              undoBtn.classList.add('visible');
+              amountInput.style.display = 'block';
+              amountInput.focus();
+            }
+          }
+        }
+        requestAnimationFrame(scan);
+      }
 
-      amountInput.addEventListener('input',()=>{ const v=amountInput.value.trim(); if(v){ qrCanvas.style.display='block'; new QRious({element:qrCanvas,value:`upi://pay?pa=${upiId}&am=${v}`,size:qrCanvas.clientWidth}); shareBtn.disabled=false;shareBtn.classList.add('enabled'); downloadBtn.disabled=false;downloadBtn.classList.add('enabled'); } else { qrCanvas.style.display='none'; shareBtn.disabled=true;shareBtn.classList.remove('enabled'); downloadBtn.disabled=true;downloadBtn.classList.remove('enabled'); }});
-      shareBtn.addEventListener('click',()=>{ const v=amountInput.value.trim(); window.open(`https://wa.me/?text=${encodeURIComponent(`Hi! Could you please transfer ₹${v} to ${upiId} and send me a screenshot once it’s done? Thanks!`)}`, '_blank'); });
-      downloadBtn.addEventListener('click',()=>{ const v=amountInput.value.trim(), d=new Date(), dd=String(d.getDate()).padStart(2,'0'), mm=String(d.getMonth()+1).padStart(2,'0'), yy=String(d.getFullYear()).slice(-2); const fn=`${upiId}-₹${v}-${dd}.${mm}.${yy}.png`; const l=document.createElement('a'); l.href=qrCanvas.toDataURL('image/png'); l.download=fn; l.click(); });
-      let lt; qrCanvas.addEventListener('touchstart',()=>{ lt=setTimeout(async()=>{ qrCanvas.toBlob(async b=>{ const f=new File([b],'qr.png',{type:'image/png'}); if(navigator.canShare&&navigator.canShare({files:[f]})) await navigator.share({files:[f],title:'UPI QR Code'}); }); },600); }); qrCanvas.addEventListener('touchend',()=>clearTimeout(lt)); qrCanvas.addEventListener('touchmove',()=>clearTimeout(lt));
-      undoBtn.addEventListener('click',()=>{ scanning=true;scanner.style.display='block';laser.style.display='block';upiText.textContent='Scanning for UPI ID…';undoBtn.classList.remove('visible');amountInput.style.display='none';amountInput.value='';qrCanvas.style.display='none';shareBtn.disabled=true;shareBtn.classList.remove('enabled');downloadBtn.disabled=true;downloadBtn.classList.remove('enabled');scan(); });
+      scan();
+
+      amountInput.addEventListener('input', () => {
+        const val = amountInput.value.trim();
+        if (val) {
+          qrCanvas.style.display = 'block';
+          new QRious({ element: qrCanvas, value: `upi://pay?pa=${upiId}&am=${val}`, size: qrCanvas.clientWidth });
+          shareBtn.disabled = false;
+          shareBtn.classList.add('enabled');
+        } else {
+          qrCanvas.style.display = 'none';
+          shareBtn.disabled = true;
+          shareBtn.classList.remove('enabled');
+        }
+      });
+
+      shareBtn.addEventListener('click', async () => {
+        qrCanvas.toBlob(async (blob) => {
+          const file = new File([blob], 'upi_qr.png', { type: 'image/png' });
+          const amt = amountInput.value.trim();
+          const message = `Hi there! Could you please transfer ₹${amt} to ${upiId} (or use the QR code) and share a screenshot once it’s done? Thanks!`;
+          if (navigator.canShare && navigator.canShare({ files: [file], text: message })) {
+            await navigator.share({ files: [file], text: message, title: 'UPI Payment Request' });
+          } else {
+            alert(`Sharing not supported on this device.\n\n${message}`);
+          }
+        });
+      });
+
+      undoBtn.addEventListener('click', () => {
+        scanning = true;
+        scanner.style.display = 'block';
+        laser.style.display = 'block';
+        upiText.textContent = 'Scanning for UPI ID…';
+        undoBtn.classList.remove('visible');
+        amountInput.style.display = 'none';
+        amountInput.value = '';
+        qrCanvas.style.display = 'none';
+        shareBtn.disabled = true;
+        shareBtn.classList.remove('enabled');
+        scan();
+      });
     })();
   </script>
 </body>
