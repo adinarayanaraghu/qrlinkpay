@@ -2,124 +2,112 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>UPI Scanner & Web-Link Pay</title>
-  <!-- jsQR for QR decoding -->
-  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Minimal UPI QR Scanner</title>
+  <link rel="manifest" href="manifest.json">
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 1rem; }
-    video { width: 100%; max-width: 400px; border: 1px solid #ccc; }
-    #controls { margin-top: 1rem; }
-    input, button, a { display: block; margin: .5rem auto; padding: .5rem 1rem; border-radius: 4px; border: 1px solid #888; text-decoration: none; }
-    button { cursor: pointer; }
-    a.whatsapp { background: #25D366; color: white; }
-    a.paylink { background: #4CAF50; color: white; }
+    /* Reset */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      background: #f0f2f5; font-family: 'Segoe UI', Tahoma, sans-serif;
+      color: #333;
+    }
+    .container {
+      flex: 1; max-width: 380px; width: 95vw;
+      background: #fff; border-radius: 12px; padding: 24px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      display: flex; flex-direction: column; align-items: center;
+      overflow: auto;
+    }
+    .header-card {
+      width: 100%; background: #fafafa; border-radius: 8px;
+      padding: 12px 16px; margin-bottom: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .header-card h2 { font-size: 18px; color: #4a4a4a; }
+    #scannerContainer {
+      position: relative; width:100%; padding-top:75%;
+      background:#000; border-radius:8px; overflow:hidden;
+      margin-bottom:24px; box-shadow: inset 0 2px 4px rgba(255,255,255,0.1);
+    }
+    #scannerContainer video { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+    #laserLine {
+      position:absolute; left:0; width:100%; height:3px;
+      background:#ff4d4f; animation:scanLine 1.5s ease-in-out infinite;
+    }
+    @keyframes scanLine { 0%,100%{top:0;} 50%{top:calc(100% - 3px);} }
+    #upiText { font-size:14px; margin-bottom:16px; color:#555; }
+    .controls { width:100%; display:flex; justify-content:flex-end; margin-bottom:16px; }
+    .icon-btn {
+      background:#fff; border:1px solid #e0e0e0; border-radius:50%;
+      width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+      cursor:pointer; font-size:18px; color:#ff4d4f; opacity:0;
+      transition:opacity 0.3s, transform 0.2s;
+    }
+    .icon-btn.visible { opacity:1; }
+    .icon-btn:hover { transform:scale(1.1); }
+    input, button { width:100%; padding:12px; border-radius:8px; border:1px solid #d9d9d9;
+      font-size:15px; margin-bottom:16px; transition:box-shadow 0.3s, border-color 0.3s;
+    }
+    input { display:none; }
+    input:focus { outline:none; border-color:#40a9ff; box-shadow:0 0 0 2px rgba(24,144,255,0.2); }
+    .btn { background:#1890ff; color:#fff; border:none; cursor:pointer; opacity:0.7; }
+    .btn.enabled { opacity:1; }
+    .btn:disabled { cursor:not-allowed; opacity:0.5; }
+    .btn:hover:enabled { background:#40a9ff; }
+    .btn.download { background:#52c41a; display:none; }
+    .btn.download.enabled { display:block; margin-top:16px; opacity:1; }
+    .btn.download:hover:enabled { background:#73d13d; }
+    #qrCanvas { display:none; width:60%; max-width:240px; margin:0 auto 16px auto; }
+    footer { font-size:12px; color:#999; margin-top:24px; }
   </style>
 </head>
 <body>
-
-  <!-- Redirect UI (shown only when pa & am present) -->
-  <div id="redirectUI" hidden>
-    <h1>Redirecting to UPI…</h1>
-    <p id="redirMsg">If you’re not redirected, <a id="fallback" href="#">click here</a>.</p>
-  </div>
-
-  <!-- Scanner UI (default) -->
-  <div id="scannerUI" hidden>
-    <h1>UPI QR Scanner & Pay-Link Generator</h1>
-    <video id="video" autoplay playsinline></video>
-    <canvas id="canvas" hidden></canvas>
-    <div id="controls" hidden>
-      <p>UPI ID: <strong><span id="upiId"></span></strong></p>
-      <input id="amount" type="number" placeholder="Enter amount (INR)" min="1" step="0.01">
-      <button id="generateLink">Generate Web-Link</button>
-      <a id="payLink" class="paylink" href="#" target="_blank" hidden>Open Pay Link</a>
-      <a id="whatsappShare" class="whatsapp" href="#" target="_blank" hidden>Share via WhatsApp</a>
+  <div class="container">
+    <div class="header-card"><h2>Scan the QR</h2></div>
+    <div id="scannerContainer">
+      <video id="video" autoplay playsinline></video>
+      <div id="laserLine"></div>
     </div>
+    <div id="upiText">Scanning for UPI ID…</div>
+    <div class="controls">
+      <button id="undo" class="icon-btn" title="Scan Again">↺</button>
+    </div>
+    <input type="number" id="amountInput" placeholder="Enter amount (₹)" />
+    <button id="shareBtn" class="btn" disabled>Share on WhatsApp</button>
+    <canvas id="qrCanvas"></canvas>
+    <button id="downloadBtn" class="btn download" disabled>Download QR</button>
+    <footer id="footer"></footer>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrious/dist/qrious.min.js"></script>
   <script>
-    const params = new URLSearchParams(location.search);
-    const pa = params.get('pa');
-    const am = params.get('am');
+    // Footer
+    const footer = document.getElementById('footer');
+    footer.textContent = `© ${new Date().getFullYear()} Made with ❤️ in India, a product of ECPL`;
 
-    if (pa && am) {
-      // REDIRECT MODE: use Android intent:// scheme for chooser across all UPI apps
-      document.getElementById('redirectUI').hidden = false;
-      const intentLink =
-        `intent://pay?pa=${encodeURIComponent(pa)}&am=${encodeURIComponent(am)}&cu=INR` +
-        `#Intent;scheme=upi;action=android.intent.action.VIEW;end`;
-      // fallback to basic UPI URI
-      const upiUri = `upi://pay?pa=${encodeURIComponent(pa)}&am=${encodeURIComponent(am)}&cu=INR`;
-      const fallbackEl = document.getElementById('fallback');
-      fallbackEl.href = intentLink;
-      fallbackEl.onclick = e => {
-        // if intent fails, try the generic UPI URI
-        setTimeout(() => window.location.replace(upiUri), 500);
-      };
-      // auto-redirect to intent URI
-      setTimeout(() => window.location.replace(intentLink), 300);
-    } else {
-      // SCANNER MODE
-      document.getElementById('scannerUI').hidden = false;
-      const video = document.getElementById('video');
-      const canvas = document.getElementById('canvas');
-      const ctx = canvas.getContext('2d');
-      const controls = document.getElementById('controls');
-      const upiIdSpan = document.getElementById('upiId');
-      const amountInput = document.getElementById('amount');
-      const genBtn = document.getElementById('generateLink');
-      const payLink = document.getElementById('payLink');
-      const whatsappBtn = document.getElementById('whatsappShare');
-
-      let scanning = true;
-
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(stream => {
-          video.srcObject = stream;
-          video.play();
-          requestAnimationFrame(tick);
-        })
-        .catch(err => alert('Error accessing camera: ' + err.message));
-
-      function tick() {
-        if (!scanning) return;
-        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(img.data, img.width, img.height);
-          if (code?.data) {
-            scanning = false;
-            let upiId = code.data;
-            if (upiId.toLowerCase().startsWith('upi://')) {
-              try {
-                const u = new URL(upiId);
-                upiId = u.searchParams.get('pa') || upiId;
-              } catch {};
-            }
-            upiIdSpan.textContent = upiId;
-            controls.hidden = false;
-          }
-        }
-        requestAnimationFrame(tick);
-      }
-
-      genBtn.addEventListener('click', () => {
-        const upiId = upiIdSpan.textContent.trim();
-        const amount = amountInput.value.trim();
-        if (!upiId || !amount) return alert('Please enter both UPI ID and amount');
-        // shareable HTTPS web-link pointing back here
-        const webLink = `${location.origin + location.pathname}?pa=${encodeURIComponent(upiId)}&am=${encodeURIComponent(amount)}`;
-        payLink.href = webLink;
-        payLink.hidden = false;
-        const msg = `Please pay ₹${amount} to ${upiId} via UPI:\n${webLink}`;
-        whatsappBtn.href = `https://wa.me/?text=${encodeURIComponent(msg)}`;
-        whatsappBtn.hidden = false;
-      });
-    }
+    // Scanner logic
+    (async ()=>{
+      const video=document.getElementById('video'), canvas=document.createElement('canvas'), ctx=canvas.getContext('2d');
+      const scanner=document.getElementById('scannerContainer'), laser=document.getElementById('laserLine');
+      const upiText=document.getElementById('upiText'), undoBtn=document.getElementById('undo');
+      const amountInput=document.getElementById('amountInput'), shareBtn=document.getElementById('shareBtn');
+      const downloadBtn=document.getElementById('downloadBtn'), qrCanvas=document.getElementById('qrCanvas');
+      let upiId='', scanning=true;
+      try { video.srcObject=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); }
+      catch{upiText.textContent='Camera access denied'; laser.style.display='none'; return;}
+      function scan(){ if(!scanning) return; if(video.readyState===video.HAVE_ENOUGH_DATA){ canvas.width=video.videoWidth;canvas.height=video.videoHeight;ctx.drawImage(video,0,0);const data=jsQR(ctx.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height); if(data&&data.data){ const m=data.data.match(/[?&]pa=([\w.\-@]+)/); upiId=m?m[1]:(data.data.match(/^[\w.\-@]+$/)||[])[0]; if(upiId){ scanning=false;scanner.style.display='none';laser.style.display='none';upiText.textContent='UPI ID: '+upiId;undoBtn.classList.add('visible');amountInput.style.display='block';amountInput.focus();}}}requestAnimationFrame(scan);} scan();
+      amountInput.addEventListener('input',()=>{const v=amountInput.value.trim(); if(v){ qrCanvas.style.display='block'; new QRious({element:qrCanvas,value:`upi://pay?pa=${upiId}&am=${v}`,size:qrCanvas.clientWidth}); shareBtn.disabled=false;shareBtn.classList.add('enabled'); downloadBtn.disabled=false;downloadBtn.classList.add('enabled'); } else { qrCanvas.style.display='none'; shareBtn.disabled=true;shareBtn.classList.remove('enabled'); downloadBtn.disabled=true;downloadBtn.classList.remove('enabled'); }});
+      shareBtn.addEventListener('click',()=>{ const v=amountInput.value.trim(); window.open(`https://wa.me/?text=${encodeURIComponent(`Hi! Could you please transfer ₹${v} to ${upiId} and send me a screenshot once it’s done? Thanks!`)}`, '_blank'); });
+      downloadBtn.addEventListener('click',()=>{ const v=amountInput.value.trim(), d=new Date(), dd=String(d.getDate()).padStart(2,'0'), mm=String(d.getMonth()+1).padStart(2,'0'), yy=String(d.getFullYear()).slice(-2); const fn=`${upiId}-₹${v}-${dd}.${mm}.${yy}.png`; const l=document.createElement('a');l.href=qrCanvas.toDataURL('image/png');l.download=fn;l.click(); });
+      let lt;
+      qrCanvas.addEventListener('touchstart',()=>{ lt=setTimeout(async()=>{ qrCanvas.toBlob(async b=>{ const f=new File([b],'qr.png',{type:'image/png'}); if(navigator.canShare&&navigator.canShare({files:[f]})) await navigator.share({files:[f],title:'UPI QR Code'}); }); },600); });
+      qrCanvas.addEventListener('touchend',()=>clearTimeout(lt)); qrCanvas.addEventListener('touchmove',()=>clearTimeout(lt));
+      undoBtn.addEventListener('click',()=>{ scanning=true;scanner.style.display='block';laser.style.display='block';upiText.textContent='Scanning for UPI ID…';undoBtn.classList.remove('visible');amountInput.style.display='none';amountInput.value='';qrCanvas.style.display='none';shareBtn.disabled=true;shareBtn.classList.remove('enabled');downloadBtn.disabled=true;downloadBtn.classList.remove('enabled');scan(); });
+    })();
   </script>
-
 </body>
 </html>
